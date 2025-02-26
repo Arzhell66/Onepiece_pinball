@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>One Piece Pinball</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
+  <style>
+    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #1e90ff; }
+    canvas { border: 2px solid #000; }
+  </style>
+</head>
+<body>
+<script>
+let ball; // Luffy as the ball
+let flippers = [];
+let bumpers = [];
+let walls = [];
+let spinners = [];
+let score = 0;
+
+function setup() {
+  createCanvas(600, 800);
+  ball = new Ball(width / 2, height + 20, 15); // Luffy off-screen
+  flippers.push(new Flipper(width / 2 - 120, height - 50, 100, true)); // Left flipper, wider
+  flippers.push(new Flipper(width / 2 + 120, height - 50, 100, false)); // Right flipper, wider
+  bumpers.push(new Bumper(width / 2, height / 3, 40)); // Zoro
+  bumpers.push(new Bumper(width / 3, height / 2, 30)); // Nami
+  bumpers.push(new Bumper(2 * width / 3, height / 2, 30)); // Sanji
+  bumpers.push(new Bumper(width / 2, height / 4, 20)); // Chopper Guard
+  walls.push(new Wall(0, height / 2, 150, height - 100)); // Chopper’s Left Guard Wall
+  walls.push(new Wall(width, height / 2, width - 150, height - 100)); // Chopper’s Right Guard Wall
+  spinners.push(new Spinner(width / 2, height / 2 - 50, 80, 20)); // Franky Cannon
+}
+
+function draw() {
+  background(135, 206, 235); // Sea
+  fill(139, 69, 19); // Ship deck
+  rect(0, 0, width, height, 20);
+
+  fill(255);
+  textSize(20);
+  text(`Score: ${score}`, 10, 30);
+  text("One Piece Pinball - Press N to Spawn", width - 250, 30);
+
+  ball.update();
+  ball.show();
+
+  for (let flipper of flippers) {
+    flipper.show();
+    if (flipper.hit(ball)) {
+      ball.bounceFlipper(flipper);
+    }
+  }
+
+  for (let bumper of bumpers) {
+    bumper.show();
+    if (bumper.hit(ball)) {
+      ball.bounceBumper(bumper.r === 20 ? 50 : 10);
+    }
+  }
+
+  for (let wall of walls) {
+    wall.show();
+    if (wall.hit(ball)) {
+      ball.bounceWall(wall);
+    }
+  }
+
+  for (let spinner of spinners) {
+    spinner.update();
+    spinner.show();
+    if (spinner.hit(ball)) {
+      ball.bounceSpinner();
+      score += 20;
+    }
+  }
+
+  if (ball.y > height + 20) {
+    ball.pos.set(width / 2, height + 20);
+    ball.vel.set(0, 0);
+  }
+}
+
+function keyPressed() {
+  if (keyCode === LEFT_ARROW) flippers[0].rotate(true);
+  if (keyCode === RIGHT_ARROW) flippers[1].rotate(true);
+  if (key === 'N' || key === 'n') ball.spawn();
+}
+
+function keyReleased() {
+  if (keyCode === LEFT_ARROW) flippers[0].rotate(false);
+  if (keyCode === RIGHT_ARROW) flippers[1].rotate(false);
+}
+
+class Ball {
+  constructor(x, y, r) {
+    this.pos = createVector(x, y);
+    this.vel = createVector(0, 0);
+    this.r = r;
+  }
+
+  update() {
+    this.vel.y += 0.5; // Gravity
+    this.pos.add(this.vel);
+    if (this.pos.x < this.r || this.pos.x > width - this.r) this.vel.x *= -0.9;
+    if (this.pos.y < this.r) this.vel.y *= -0.9;
+  }
+
+  spawn() {
+    this.pos.set(width / 2, height / 4); // Top spawn
+    this.vel.set(random(-2, 2), 0);
+  }
+
+  bounceFlipper(flipper) {
+    this.vel.y = -abs(this.vel.y) - 5;
+    this.vel.x += flipper.isLeft ? -2 : 2;
+  }
+
+  bounceBumper(points) {
+    this.vel.y *= -1.2;
+    this.vel.x += random(-2, 2);
+    score += points;
+  }
+
+  bounceWall(wall) {
+    let normal = createVector(wall.end.x - wall.start.x, wall.end.y - wall.start.y).rotate(HALF_PI).normalize();
+    let dot = this.vel.dot(normal);
+    this.vel.sub(normal.mult(2 * dot));
+    this.vel.mult(0.9);
+  }
+
+  bounceSpinner() {
+    this.vel.y = -abs(this.vel.y) - 1; // Reduced power
+    this.vel.x += random(-1, 1); // Softer x-kick
+  }
+
+  show() {
+    fill(255, 0, 0); // Luffy
+    ellipse(this.pos.x, this.pos.y, this.r * 2);
+  }
+}
+
+class Flipper {
+  constructor(x, y, len, isLeft) {
+    this.x = x;
+    this.y = y;
+    this.len = len;
+    this.angle = 0;
+    this.isLeft = isLeft;
+  }
+
+  rotate(up) {
+    this.angle = up ? (this.isLeft ? -PI / 4 : PI / 4) : 0; // Left up-right, right up-left
+  }
+
+  hit(ball) {
+    push();
+    translate(this.x, this.y);
+    rotate(this.angle);
+    let rectX = this.isLeft ? 0 : -this.len;
+    pop();
+    let ballLeft = ball.pos.x - ball.r;
+    let ballRight = ball.pos.x + ball.r;
+    let ballTop = ball.pos.y - ball.r;
+    let ballBottom = ball.pos.y + ball.r;
+    let flipperLeft = this.x + rectX;
+    let flipperRight = flipperLeft + this.len;
+    let flipperTop = this.y - 10;
+    let flipperBottom = this.y + 10;
+    return (ballRight > flipperLeft && ballLeft < flipperRight && ballBottom > flipperTop && ballTop < flipperBottom);
+  }
+
+  show() {
+    push();
+    translate(this.x, this.y);
+    rotate(this.angle);
+    fill(0, 255, 0); // Flippers
+    rect(this.isLeft ? 0 : -this.len, -10, this.len, 20);
+    pop();
+  }
+}
+
+class Bumper {
+  constructor(x, y, r) {
+    this.pos = createVector(x, y);
+    this.r = r;
+  }
+
+  hit(ball) {
+    let d = dist(ball.pos.x, ball.pos.y, this.pos.x, this.pos.y);
+    return d < this.r + ball.r;
+  }
+
+  show() {
+    fill(this.r === 20 ? 255 : 255, this.r === 20 ? 105 : 215, 0); // Chopper pink, others gold
+    ellipse(this.pos.x, this.pos.y, this.r * 2);
+  }
+}
+
+class Wall {
+  constructor(x1, y1, x2, y2) {
+    this.start = createVector(x1, y1);
+    this.end = createVector(x2, y2);
+  }
+
+  hit(ball) {
+    let d = distToSegment(ball.pos, this.start, this.end);
+    return d < ball.r;
+  }
+
+  show() {
+    stroke(160, 82, 45); // Wood brown
+    strokeWeight(10);
+    line(this.start.x, this.start.y, this.end.x, this.end.y);
+    noStroke();
+  }
+}
+
+class Spinner {
+  constructor(x, y, w, h) {
+    this.pos = createVector(x, y);
+    this.w = w;
+    this.h = h;
+    this.angle = 0;
+  }
+
+  update() {
+    this.angle += 0.1;
+  }
+
+  hit(ball) {
+    let d = dist(ball.pos.x, ball.pos.y, this.pos.x, this.pos.y);
+    return d < (this.w / 2 + ball.r);
+  }
+
+  show() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.angle);
+    fill(128, 128, 128); // Silver for Franky
+    rect(-this.w / 2, -this.h / 2, this.w, this.h);
+    pop();
+  }
+}
+
+function distToSegment(p, v, w) {
+  let l2 = dist(v.x, v.y, w.x, w.y) ** 2;
+  if (l2 === 0) return dist(p.x, p.y, v.x, v.y);
+  let t = max(0, min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
+  let projX = v.x + t * (w.x - v.x);
+  let projY = v.y + t * (w.y - v.y);
+  return dist(p.x, p.y, projX, projY);
+}
+</script>
+</body>
+</html>
